@@ -318,7 +318,7 @@ public:
   }
 
   void add(const std::string &name,
-           char short_name=0,
+           std::string short_name=0,
            const std::string &desc=""){
     if (options.count(name)) throw cmdline_error("multiple definition: "+name);
     options[name]=new option_without_value(name, short_name, desc);
@@ -327,7 +327,7 @@ public:
 
   template <class T>
   void add(const std::string &name,
-           char short_name=0,
+           std::string short_name=0,
            const std::string &desc="",
            bool need=true,
            const T def=T()){
@@ -336,7 +336,7 @@ public:
 
   template <class T, class F>
   void add(const std::string &name,
-           char short_name=0,
+           std::string short_name=0,
            const std::string &desc="",
            bool need=true,
            const T def=T(),
@@ -434,12 +434,12 @@ public:
     if (prog_name=="")
       prog_name=argv[0];
 
-    std::map<char, std::string> lookup;
+    std::map<std::string, std::string> lookup;
     for (std::map<std::string, option_base*>::iterator p=options.begin();
          p!=options.end(); p++){
       if (p->first.length()==0) continue;
-      char initial=p->second->short_name();
-      if (initial){
+      auto initial=p->second->short_name();
+      if (initial.size()>0){
         if (lookup.count(initial)>0){
           lookup[initial]="";
           errors.push_back(std::string("short option '")+initial+"' is ambiguous");
@@ -479,39 +479,40 @@ public:
         }
       }
       else if (strncmp(argv[i], "-", 1)==0){
-        if (!argv[i][1]) continue;
-        char last=argv[i][1];
-        for (int j=2; argv[i][j]; j++){
-          last=argv[i][j];
-          if (lookup.count(argv[i][j-1])==0){
-            errors.push_back(std::string("undefined short option: -")+argv[i][j-1]);
+        const char *p=strchr(argv[i]+1, '=');
+        if (p){
+          std::string name(argv[i]+1, p);
+          std::string val(p+1);
+
+          if (lookup.count(name)==0){
+            errors.push_back(std::string("undefined short option: -")+name);
             continue;
           }
-          if (lookup[argv[i][j-1]]==""){
-            errors.push_back(std::string("ambiguous short option: -")+argv[i][j-1]);
-            continue;
-          }
-          set_option(lookup[argv[i][j-1]]);
-        }
 
-        if (lookup.count(last)==0){
-          errors.push_back(std::string("undefined short option: -")+last);
-          continue;
-        }
-        if (lookup[last]==""){
-          errors.push_back(std::string("ambiguous short option: -")+last);
-          continue;
-        }
-
-        if (i+1<argc && options[lookup[last]]->has_value()){
-          set_option(lookup[last], argv[i+1]);
-          i++;
+          set_option(lookup[name], val);
         }
         else{
-          set_option(lookup[last]);
+          std::string name(argv[i]+1);
+          if (lookup.count(name)==0){
+            errors.push_back("undefined option: --"+name);
+            continue;
+          }
+          if (options[lookup[name]]->has_value()){
+            if (i+1>=argc){
+              errors.push_back("option needs value: --"+name);
+              continue;
+            }
+            else{
+              i++;
+              set_option(lookup[name], argv[i]);
+            }
+          }
+          else{
+            set_option(lookup[name]);
+          }
         }
-      }
-      else{
+    } else
+      {
         others.push_back(argv[i]);
       }
     }
@@ -524,21 +525,22 @@ public:
     return errors.size()==0;
   }
 
+
   void parse_check(const std::string &arg){
     if (!options.count("help"))
-      add("help", '?', "print this message");
+      add("help", "?", "print this message");
     check(0, parse(arg));
   }
 
   void parse_check(const std::vector<std::string> &args){
     if (!options.count("help"))
-      add("help", '?', "print this message");
+      add("help", "?", "print this message");
     check(args.size(), parse(args));
   }
 
   void parse_check(int argc, char *argv[]){
     if (!options.count("help"))
-      add("help", '?', "print this message");
+      add("help", "?", "print this message");
     check(argc, parse(argc, argv));
   }
 
@@ -569,7 +571,7 @@ public:
       max_width=std::max(max_width, ordered[i]->name().length());
     }
     for (size_t i=0; i<ordered.size(); i++){
-      if (ordered[i]->short_name()){
+      if (ordered[i]->short_name().size()>0){
         oss<<"  -"<<ordered[i]->short_name()<<", ";
       }
       else{
@@ -632,7 +634,7 @@ private:
     virtual bool must() const=0;
 
     virtual const std::string &name() const=0;
-    virtual char short_name() const=0;
+    virtual std::string short_name() const=0;
     virtual const std::string &description() const=0;
     virtual std::string short_description() const=0;
   };
@@ -640,7 +642,7 @@ private:
   class option_without_value : public option_base {
   public:
     option_without_value(const std::string &name,
-                         char short_name,
+                         std::string short_name,
                          const std::string &desc)
       :nam(name), snam(short_name), desc(desc), has(false){
     }
@@ -673,7 +675,7 @@ private:
       return nam;
     }
 
-    char short_name() const{
+    std::string short_name() const{
       return snam;
     }
 
@@ -687,7 +689,7 @@ private:
 
   private:
     std::string nam;
-    char snam;
+    std::string snam;
     std::string desc;
     bool has;
   };
@@ -696,7 +698,7 @@ private:
   class option_with_value : public option_base {
   public:
     option_with_value(const std::string &name,
-                      char short_name,
+                      std::string short_name,
                       bool need,
                       const T &def,
                       const std::string &desc)
@@ -744,7 +746,7 @@ private:
       return nam;
     }
 
-    char short_name() const{
+    std::string short_name() const{
       return snam;
     }
 
@@ -767,7 +769,7 @@ private:
     virtual T read(const std::string &s)=0;
 
     std::string nam;
-    char snam;
+    std::string snam;
     bool need;
     std::string desc;
 
@@ -780,7 +782,7 @@ private:
   class option_with_value_with_reader : public option_with_value<T> {
   public:
     option_with_value_with_reader(const std::string &name,
-                                  char short_name,
+                                  std::string short_name,
                                   bool need,
                                   const T def,
                                   const std::string &desc,
