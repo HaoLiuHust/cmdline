@@ -1,3 +1,5 @@
+Change: add support for string short name  
+
 =============================================
 cmdline: A simple command line parser for C++
 =============================================
